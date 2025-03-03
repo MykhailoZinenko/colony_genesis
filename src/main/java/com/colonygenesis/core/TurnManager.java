@@ -1,70 +1,72 @@
-// Update TurnManager.java
 package com.colonygenesis.core;
 
-import javafx.scene.control.Alert;
+import com.colonygenesis.event.EventBus;
+import com.colonygenesis.event.events.TurnEvent;
+import com.colonygenesis.util.LoggerUtils;
+
+import java.util.logging.Logger;
 
 public class TurnManager {
+    private static final Logger LOGGER = LoggerUtils.getLogger(TurnManager.class);
+
     private final Game game;
+    private final EventBus eventBus;
     private int turnNumber;
     private TurnPhase currentPhase;
     private boolean phaseCompleted;
 
     public TurnManager(Game game) {
         this.game = game;
+        this.eventBus = EventBus.getInstance();
         this.turnNumber = 1;
         this.currentPhase = TurnPhase.PLANNING;
         this.phaseCompleted = false;
+
+        LOGGER.info("TurnManager initialized at turn 1, phase: PLANNING");
     }
 
     public void advanceTurn() {
+        int previousTurn = turnNumber;
         turnNumber++;
         currentPhase = TurnPhase.PLANNING;
         phaseCompleted = false;
 
-        System.out.println("Starting turn " + turnNumber);
-
+        LOGGER.info("Starting turn " + turnNumber);
         game.setCurrentTurn(turnNumber);
 
-        // Notify player of new turn
-        if (game.getUserInterface() != null) {
-            game.getUserInterface().showMessage("Turn " + turnNumber + " started.", "info");
-        }
+        // Publish turn advanced event
+        eventBus.publish(TurnEvent.turnAdvanced(this, turnNumber, previousTurn));
     }
 
     public void advancePhase() {
         // Make sure the current phase is completed if it requires input
         if (currentPhase.requiresInput() && !phaseCompleted) {
-            System.out.println("Warning: Attempting to advance from " + currentPhase.getName() + " which was not completed");
-
+            LOGGER.warning("Attempting to advance from " + currentPhase.getName() + " which was not completed");
             // Allow advancement in development for testing
-            // In final game, this would prevent advancement until phase is completed
-            // return;
         }
 
         // Get the ordinal value of the current phase
         int ordinal = currentPhase.ordinal();
+        TurnPhase previousPhase = currentPhase;
 
         // Get the next phase (or cycle back to PLANNING)
         TurnPhase[] phases = TurnPhase.values();
         currentPhase = phases[(ordinal + 1) % phases.length];
         phaseCompleted = false;
 
-        System.out.println("Phase changed to: " + currentPhase.getName());
+        LOGGER.info("Phase changed to: " + currentPhase.getName());
+
+        // Publish phase changed event
+        eventBus.publish(TurnEvent.phaseChanged(this, turnNumber, currentPhase, previousPhase));
 
         // If the phase doesn't require input, execute it immediately
         if (!currentPhase.requiresInput()) {
             executeCurrentPhase();
         }
-
-        // Update the UI
-        if (game.getUserInterface() != null) {
-            game.getUserInterface().updateDisplay();
-            game.getUserInterface().showMessage("Now in " + currentPhase.getName() + " phase.", "info");
-        }
     }
 
     public void executeCurrentPhase() {
-        System.out.println("Executing phase: " + currentPhase.getName());
+        LOGGER.info("Executing phase: " + currentPhase.getName());
 
         switch (currentPhase) {
             case PLANNING:
@@ -101,8 +103,10 @@ public class TurnManager {
         // Mark phase as completed
         phaseCompleted = true;
 
+        System.out.println(currentPhase.requiresInput() + " " + currentPhase.getName() + " " + currentPhase + " " + (!currentPhase.requiresInput() && currentPhase != TurnPhase.END_TURN));
         // After executing the phase, if it doesn't require input, move to the next one
         if (!currentPhase.requiresInput() && currentPhase != TurnPhase.END_TURN) {
+            System.out.println(currentPhase.requiresInput() + " " + currentPhase.getName() + " " + currentPhase);
             advancePhase();
         }
     }

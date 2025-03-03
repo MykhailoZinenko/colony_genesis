@@ -4,8 +4,13 @@ import com.colonygenesis.building.Building;
 import com.colonygenesis.building.BuildingFactory;
 import com.colonygenesis.building.BuildingType;
 import com.colonygenesis.core.Game;
+import com.colonygenesis.event.EventBus;
+import com.colonygenesis.event.EventListener;
+import com.colonygenesis.event.GameEvent;
 import com.colonygenesis.resource.ResourceType;
+import com.colonygenesis.util.LoggerUtils;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -17,21 +22,34 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
-public class BuildingPanel extends Panel {
-    private Game game;
-    private VBox buildingsContainer;
-    private List<Building> availableBuildings;
+public class BuildingPanel extends Panel implements EventListener {
+    private static final Logger LOGGER = LoggerUtils.getLogger(BuildingPanel.class);
+
+    private final Game game;
+    private final VBox buildingsContainer;
+    private final EventBus eventBus;
     private Building selectedBuilding;
     private Consumer<Building> onBuildingSelected;
 
     public BuildingPanel(Game game) {
         this.game = game;
-        this.availableBuildings = new ArrayList<>();
+        this.eventBus = EventBus.getInstance();
+        this.buildingsContainer = new VBox(10);
 
-        //setTitle("Construction");
+        // Register for events
+        eventBus.register(this,
+                GameEvent.EventType.RESOURCE_CHANGED,
+                GameEvent.EventType.BUILDING_PLACED
+        );
 
-        buildingsContainer = new VBox(10);
+        initializePanel();
+
+        LOGGER.info("BuildingPanel initialized");
+    }
+
+    private void initializePanel() {
         buildingsContainer.setPadding(new Insets(10));
 
         ScrollPane scrollPane = new ScrollPane(buildingsContainer);
@@ -42,38 +60,28 @@ public class BuildingPanel extends Panel {
         getStyleClass().add("panel-success");
 
         // Initialize with available buildings
-        initializeBuildings();
-    }
-
-    private void initializeBuildings() {
-        // Add production buildings
-        availableBuildings.add(BuildingFactory.createFarm());
-        availableBuildings.add(BuildingFactory.createMine());
-        availableBuildings.add(BuildingFactory.createSolarPanel());
-        availableBuildings.add(BuildingFactory.createWaterExtractor());
-
-        // Add habitation buildings
-        availableBuildings.add(BuildingFactory.createHabitationDome());
-        availableBuildings.add(BuildingFactory.createLuxuryApartments());
-
-        // Update the UI
         updateBuildingsList();
     }
 
     private void updateBuildingsList() {
         buildingsContainer.getChildren().clear();
 
-        for (Building building : availableBuildings) {
-            // Create a panel for each building
-            VBox buildingItem = createBuildingItem(building);
-            buildingsContainer.getChildren().add(buildingItem);
-        }
+        // Add production buildings
+        createBuildingItem(BuildingFactory.createFarm());
+        createBuildingItem(BuildingFactory.createMine());
+        createBuildingItem(BuildingFactory.createSolarPanel());
+        createBuildingItem(BuildingFactory.createWaterExtractor());
+
+        // Add habitation buildings
+        createBuildingItem(BuildingFactory.createHabitationDome());
+        createBuildingItem(BuildingFactory.createLuxuryApartments());
     }
 
-    private VBox createBuildingItem(Building building) {
-        VBox item = new VBox(5);
-        item.setPadding(new Insets(5));
-        item.setStyle("-fx-border-color: #ddd; -fx-border-radius: 5;");
+    private void createBuildingItem(Building building) {
+        // Create a panel for each building
+        VBox buildingItem = new VBox(5);
+        buildingItem.setPadding(new Insets(5));
+        buildingItem.setStyle("-fx-border-color: #ddd; -fx-border-radius: 5;");
 
         // Building name and description
         Label nameLabel = new Label(building.getName());
@@ -88,6 +96,13 @@ public class BuildingPanel extends Panel {
 
         for (Map.Entry<ResourceType, Integer> entry : costs.entrySet()) {
             Label costLabel = new Label(entry.getKey().getName() + ": " + entry.getValue());
+
+            // Check if we can afford it
+            boolean canAfford = game.getResourceManager().getResource(entry.getKey()) >= entry.getValue();
+            if (!canAfford) {
+                costLabel.setStyle("-fx-text-fill: red;");
+            }
+
             costBox.getChildren().add(costLabel);
         }
 
@@ -97,17 +112,51 @@ public class BuildingPanel extends Panel {
         // Select button
         Button selectButton = new Button("Select");
         selectButton.getStyleClass().addAll("btn", "btn-sm", "btn-primary");
+
+        // Check if we can afford all costs
+        boolean canAffordAll = true;
+        for (Map.Entry<ResourceType, Integer> entry : costs.entrySet()) {
+            if (game.getResourceManager().getResource(entry.getKey()) < entry.getValue()) {
+                canAffordAll = false;
+                break;
+            }
+        }
+
+        selectButton.setDisable(!canAffordAll);
+
         selectButton.setOnAction(e -> {
-            selectedBuilding = building;
-            if (onBuildingSelected != null) {
-                onBuildingSelected.accept(building);
+            // Create a new instance of the building type
+            Building newBuilding = null;
+            String name = building.getName();
+
+            // Create a new instance using the factory
+            if (name.equals("Farm")) {
+                newBuilding = BuildingFactory.createFarm();
+            } else if (name.equals("Mine")) {
+                newBuilding = BuildingFactory.createMine();
+            } else if (name.equals("Solar Panel")) {
+                newBuilding = BuildingFactory.createSolarPanel();
+            } else if (name.equals("Water Extractor")) {
+                newBuilding = BuildingFactory.createWaterExtractor();
+            } else if (name.equals("Habitation Dome")) {
+                newBuilding = BuildingFactory.createHabitationDome();
+            } else if (name.equals("Luxury Apartments")) {
+                newBuilding = BuildingFactory.createLuxuryApartments();
+            }
+
+            if (newBuilding != null) {
+                selectedBuilding = newBuilding;
+                LOGGER.info("Selected building: " + selectedBuilding.getName());
+
+                if (onBuildingSelected != null) {
+                    onBuildingSelected.accept(selectedBuilding);
+                }
             }
         });
 
         // Add to item
-        item.getChildren().addAll(nameLabel, descLabel, new Label("Cost:"), costBox, timeLabel, selectButton);
-
-        return item;
+        buildingItem.getChildren().addAll(nameLabel, descLabel, new Label("Cost:"), costBox, timeLabel, selectButton);
+        buildingsContainer.getChildren().add(buildingItem);
     }
 
     public void setOnBuildingSelected(Consumer<Building> handler) {
@@ -120,5 +169,20 @@ public class BuildingPanel extends Panel {
 
     public void clearSelection() {
         selectedBuilding = null;
+    }
+
+    @Override
+    public void onEvent(GameEvent event) {
+        if (event.getType() == GameEvent.EventType.RESOURCE_CHANGED ||
+                event.getType() == GameEvent.EventType.BUILDING_PLACED) {
+            // Update building list when resources or buildings change
+            Platform.runLater(this::updateBuildingsList);
+        }
+    }
+
+    @Override
+    public boolean isInterestedIn(GameEvent.EventType eventType) {
+        return eventType == GameEvent.EventType.RESOURCE_CHANGED ||
+                eventType == GameEvent.EventType.BUILDING_PLACED;
     }
 }

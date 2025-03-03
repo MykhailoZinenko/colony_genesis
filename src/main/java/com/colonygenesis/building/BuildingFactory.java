@@ -1,14 +1,19 @@
 package com.colonygenesis.building;
 
 import com.colonygenesis.resource.ResourceType;
+import com.colonygenesis.util.LoggerUtils;
 
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 public class BuildingFactory {
+    private static final Logger LOGGER = LoggerUtils.getLogger(BuildingFactory.class);
 
     // Production buildings
     public static Building createFarm() {
+        LOGGER.fine("Creating new Farm building");
+
         ProductionBuilding farm = new ProductionBuilding(
                 "Farm", "Produces food for your colony", 2, ResourceType.FOOD, 10
         );
@@ -30,6 +35,8 @@ public class BuildingFactory {
     }
 
     public static Building createMine() {
+        LOGGER.fine("Creating new Mine building");
+
         ProductionBuilding mine = new ProductionBuilding(
                 "Mine", "Extracts materials from the ground", 3, ResourceType.MATERIALS, 8
         );
@@ -50,6 +57,8 @@ public class BuildingFactory {
     }
 
     public static Building createSolarPanel() {
+        LOGGER.fine("Creating new Solar Panel building");
+
         ProductionBuilding solarPanel = new ProductionBuilding(
                 "Solar Panel", "Generates energy from sunlight", 2, ResourceType.ENERGY, 15
         );
@@ -69,6 +78,8 @@ public class BuildingFactory {
     }
 
     public static Building createWaterExtractor() {
+        LOGGER.fine("Creating new Water Extractor building");
+
         ProductionBuilding waterExtractor = new ProductionBuilding(
                 "Water Extractor", "Extracts and purifies water", 2, ResourceType.WATER, 12
         );
@@ -90,6 +101,8 @@ public class BuildingFactory {
 
     // Habitation buildings
     public static Building createHabitationDome() {
+        LOGGER.fine("Creating new Habitation Dome building");
+
         HabitationBuilding dome = new HabitationBuilding(
                 "Habitation Dome", "Basic housing for colonists", 4, 10, 0.5f
         );
@@ -107,6 +120,8 @@ public class BuildingFactory {
     }
 
     public static Building createLuxuryApartments() {
+        LOGGER.fine("Creating new Luxury Apartments building");
+
         HabitationBuilding apartments = new HabitationBuilding(
                 "Luxury Apartments", "High-quality housing", 6, 8, 0.9f
         );

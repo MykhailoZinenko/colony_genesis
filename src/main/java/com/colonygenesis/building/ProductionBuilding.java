@@ -1,15 +1,21 @@
 package com.colonygenesis.building;
 
+import com.colonygenesis.map.ResourceDeposit;
 import com.colonygenesis.resource.ResourceType;
+import com.colonygenesis.util.LoggerUtils;
 
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.logging.Logger;
 
 public class ProductionBuilding extends Building {
-    private ResourceType primaryOutput;
-    private int baseOutput;
-    private Map<String, Float> productionModifiers;
+    private static final Logger LOGGER = LoggerUtils.getLogger(ProductionBuilding.class);
+
+    private final ResourceType primaryOutput;
+    private final int baseOutput;
+    private final Map<String, Float> productionModifiers;
 
     public ProductionBuilding(String name, String description, int constructionTime,
                               ResourceType primaryOutput, int baseOutput) {
@@ -23,33 +29,38 @@ public class ProductionBuilding extends Building {
     public Map<ResourceType, Integer> getProduction() {
         Map<ResourceType, Integer> production = new EnumMap<>(ResourceType.class);
 
-        if (isActive()) {
-            // Calculate output with modifiers
-            float totalModifier = 1.0f;
-            for (float modifier : productionModifiers.values()) {
-                totalModifier *= modifier;
-            }
-
-            System.out.println(location.getResourceDeposit().getResourceType());
-
-            // Apply terrain modifier from location
-            if (location != null) {
-                totalModifier *= location.getTerrainType().getResourceModifier(primaryOutput);
-            }
-
-            // Apply resource deposit modifier
-            if (location != null && location.hasResourceDeposit() &&
-                    location.getResourceDeposit().getResourceType() == primaryOutput) {
-                totalModifier *= location.getResourceDeposit().getYield();
-            }
-
-            int finalOutput = Math.round(baseOutput * totalModifier);
-
-            System.out.println("FINAL OUTPUT: " + finalOutput + " / " + totalModifier);
-
-            production.put(primaryOutput, finalOutput);
+        if (!isActive()) {
+            return production;  // Empty map if not active
         }
 
+        // Calculate output with modifiers
+        float totalModifier = 1.0f;
+
+        // Apply production modifiers from effects, etc.
+        for (float modifier : productionModifiers.values()) {
+            totalModifier *= modifier;
+        }
+
+        // Apply terrain modifier from location (safely)
+        if (location != null) {
+            totalModifier *= location.getTerrainType().getResourceModifier(primaryOutput);
+
+            // Apply resource deposit modifier (safely)
+            if (location.hasResourceDeposit()) {
+                ResourceDeposit deposit = location.getResourceDeposit();
+                if (deposit != null && deposit.getResourceType() == primaryOutput) {
+                    totalModifier *= deposit.getYield();
+                    LOGGER.fine("Applied resource deposit yield: " + deposit.getYield());
+                }
+            }
+        }
+
+        int finalOutput = Math.round(baseOutput * totalModifier);
+
+        LOGGER.fine(String.format("%s producing %d %s (base: %d, modifier: %.2f)",
+                getName(), finalOutput, primaryOutput.getName(), baseOutput, totalModifier));
+
+        production.put(primaryOutput, finalOutput);
         return production;
     }
 
@@ -63,10 +74,13 @@ public class ProductionBuilding extends Building {
 
     public void applyModifier(String source, float factor) {
         productionModifiers.put(source, factor);
+        LOGGER.fine(String.format("Applied modifier to %s: %s = %.2f",
+                getName(), source, factor));
     }
 
     public void removeModifier(String source) {
         productionModifiers.remove(source);
+        LOGGER.fine("Removed modifier from " + getName() + ": " + source);
     }
 
     public float getEfficiency() {

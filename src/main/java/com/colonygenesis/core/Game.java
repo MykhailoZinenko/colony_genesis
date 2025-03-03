@@ -1,13 +1,20 @@
 package com.colonygenesis.core;
 
 import com.colonygenesis.building.BuildingManager;
+import com.colonygenesis.event.EventBus;
+import com.colonygenesis.event.events.GameStateEvent;
 import com.colonygenesis.map.Planet;
 import com.colonygenesis.map.PlanetType;
 import com.colonygenesis.map.TerrainType;
 import com.colonygenesis.resource.ResourceManager;
 import com.colonygenesis.ui.UserInterface;
+import com.colonygenesis.util.LoggerUtils;
+
+import java.util.logging.Logger;
 
 public class Game {
+    private static final Logger LOGGER = LoggerUtils.getLogger(Game.class);
+
     // Game state
     private boolean initialized = false;
     private boolean running = false;
@@ -20,15 +27,16 @@ public class Game {
     private TurnManager turnManager;
     private UserInterface userInterface;
     private BuildingManager buildingManager;
+    private final EventBus eventBus;
 
     public Game() {
-        // Empty constructor
+        eventBus = EventBus.getInstance();
+        LOGGER.info("Game instance created");
     }
 
-    // In the Game class's initializeGame method:
-
-    // Update initializeGame method:
     public void initializeGame() {
+        LOGGER.info("Initializing game");
+
         // Initialize managers
         this.turnManager = new TurnManager(this);
         this.resourceManager = new ResourceManager(this);
@@ -46,44 +54,37 @@ public class Game {
         // Set initial game state
         this.currentTurn = 1;
         this.initialized = true;
+        this.running = true;
+
+        // Publish game initialized event
+        eventBus.publish(new GameStateEvent(this, GameStateEvent.GameStateType.GAME_INITIALIZED, this));
+
+        LOGGER.info("Game initialized successfully");
     }
 
     public void newGame() {
+        LOGGER.info("Starting new game");
+
         // Reset game state
         this.currentTurn = 1;
 
-        // Generate new planet
-        // We'll implement planet generation later
+        // Generate new planet - we'll implement planet generation later
+        this.planet = new Planet("New Colony", PlanetType.TEMPERATE, 30, 20);
+        this.planet.generateTerrain();
+
+        // Reset managers
+        this.turnManager = new TurnManager(this);
+        this.resourceManager = new ResourceManager(this);
+        this.buildingManager = new BuildingManager(this);
 
         // Start the game
         this.running = true;
         this.paused = false;
-    }
 
-    public void processTurn() {
-        if (!running || paused) return;
+        // Publish game started event
+        eventBus.publish(new GameStateEvent(this, GameStateEvent.GameStateType.GAME_STARTED, this));
 
-        // Make sure the current phase is marked as completed
-        turnManager.setPhaseCompleted(true);
-
-        // Process the current phase
-        turnManager.executeCurrentPhase();
-    }
-
-    // Add a method to complete the current phase:
-    public void completeCurrentPhase() {
-        if (!running || paused) return;
-
-        // Mark the current phase as completed
-        turnManager.setPhaseCompleted(true);
-
-        // Advance to the next phase
-        turnManager.advancePhase();
-
-        // Update UI
-        if (userInterface != null) {
-            userInterface.updateDisplay();
-        }
+        LOGGER.info("New game started successfully");
     }
 
     // Getters and setters
@@ -91,10 +92,11 @@ public class Game {
         return currentTurn;
     }
 
-    // Add to Game.java:
     public void setCurrentTurn(int turn) {
+        if (this.currentTurn != turn) {
+            LOGGER.info("Game turn changing: " + this.currentTurn + " → " + turn);
+        }
         this.currentTurn = turn;
-        System.out.println("Game turn set to: " + currentTurn);
     }
 
     public boolean isInitialized() {
@@ -110,7 +112,18 @@ public class Game {
     }
 
     public void setPaused(boolean paused) {
+        boolean wasPaused = this.paused;
         this.paused = paused;
+
+        if (wasPaused != paused) {
+            if (paused) {
+                LOGGER.info("Game paused");
+                eventBus.publish(new GameStateEvent(this, GameStateEvent.GameStateType.GAME_PAUSED, null));
+            } else {
+                LOGGER.info("Game resumed");
+                eventBus.publish(new GameStateEvent(this, GameStateEvent.GameStateType.GAME_RESUMED, null));
+            }
+        }
     }
 
     public TurnManager getTurnManager() {
@@ -129,7 +142,6 @@ public class Game {
         return planet;
     }
 
-    // Add this method:
     public void setUserInterface(UserInterface ui) {
         this.userInterface = ui;
     }
